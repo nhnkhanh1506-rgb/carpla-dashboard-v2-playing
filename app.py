@@ -1,346 +1,449 @@
 import streamlit as st
-import pandas as pd
-import plotly.express as px
-from pathlib import Path
+import streamlit.components.v1 as components
 
-# ======================
-# 1. PAGE CONFIG
-# ======================
 
+# ---------------------------------------------------------
+# PAGE CONFIGURATION
+# ---------------------------------------------------------
 st.set_page_config(
-    page_title="Dashboard DMS - Đà Nẵng",
-    layout="wide"
+    page_title="Carpla Service Dashboard",
+    page_icon="🚘",
+    layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
-# ======================
-# 2. FILE + TARGET
-# ======================
 
-DATA_FILE = Path("Lệnh sửa chữa (repair.order)_DN1307.xlsx")
-
-TARGET_RO = 488
-TARGET_REVENUE = 1_105_000_000
-
-# ======================
-# 3. LOAD DATA
-# ======================
-
-@st.cache_data
-def load_data():
-    df = pd.read_excel(DATA_FILE)
-
-    data = df.copy()
-
-    data = data.rename(columns={
-        "Số": "ro",
-        "Trạng thái": "trang_thai",
-        "Ngày hóa đơn": "ngay_hoa_don",
-        "Tổng trước thuế": "doanh_thu_truoc_thue",
-        "Tổng tiền": "tong_tien_sau_thue",
-        "Hãng xe": "hang_xe",
-        "Dòng xe": "dong_xe",
-        "Khách hàng": "ten_khach_hang",
-        "Khách hàng.1": "khach_hang_chi_tra",
-        "Bảo hiểm": "bao_hiem_chi_tra"
-    })
-
-    data["ngay_hoa_don"] = pd.to_datetime(data["ngay_hoa_don"], errors="coerce")
-
-    money_cols = [
-        "doanh_thu_truoc_thue",
-        "tong_tien_sau_thue",
-        "khach_hang_chi_tra",
-        "bao_hiem_chi_tra"
-    ]
-
-    for col in money_cols:
-        data[col] = pd.to_numeric(data[col], errors="coerce").fillna(0)
-
-    data["trang_thai"] = data["trang_thai"].astype(str).str.strip()
-    data["hang_xe"] = data["hang_xe"].astype(str).str.upper().str.strip()
-
-    data["hang_xe"] = data["hang_xe"].replace({
-        "HUYNDAI": "HYUNDAI",
-        "HYNDAI": "HYUNDAI",
-        "MERCEDES BENZ": "MERCEDES-BENZ",
-        "LYNK&CO": "LYNK & CO",
-        "LYNK AND CO": "LYNK & CO"
-    })
-
-    return data
+# ---------------------------------------------------------
+# WORKSHOP INFORMATION
+# Replace or add workshops later
+# Coordinates are examples and can be adjusted
+# ---------------------------------------------------------
+WORKSHOPS = {
+    "Hà Nội": {
+        "latitude": 21.0285,
+        "longitude": 105.8542,
+        "branch": "Chi nhánh Hà Nội",
+        "workshop": "Carpla Service Hà Nội",
+    },
+    "Hải Phòng": {
+        "latitude": 20.8449,
+        "longitude": 106.6881,
+        "branch": "Chi nhánh Hải Phòng",
+        "workshop": "Carpla Service Hải Phòng",
+    },
+    "Đà Nẵng": {
+        "latitude": 16.0544,
+        "longitude": 108.2022,
+        "branch": "Chi nhánh Miền Trung",
+        "workshop": "Carpla Service Đà Nẵng",
+    },
+    "TP. Hồ Chí Minh": {
+        "latitude": 10.7769,
+        "longitude": 106.7009,
+        "branch": "Chi nhánh TP. Hồ Chí Minh",
+        "workshop": "Carpla Service Tân Cảng",
+    },
+    "Cần Thơ": {
+        "latitude": 10.0452,
+        "longitude": 105.7469,
+        "branch": "Chi nhánh Cần Thơ",
+        "workshop": "Carpla Service Cần Thơ",
+    },
+}
 
 
-data_raw = load_data()
+# ---------------------------------------------------------
+# SESSION STATE
+# ---------------------------------------------------------
+if "selected_location" not in st.session_state:
+    st.session_state.selected_location = None
 
-# ======================
-# 4. TITLE + FILTER
-# ======================
 
-st.title("Dashboard DMS - Xưởng Đà Nẵng")
+# ---------------------------------------------------------
+# CUSTOM CSS
+# ---------------------------------------------------------
+st.markdown(
+    """
+    <style>
+        .stApp {
+            background:
+                radial-gradient(
+                    circle at top left,
+                    rgba(25, 72, 116, 0.12),
+                    transparent 34%
+                ),
+                linear-gradient(
+                    180deg,
+                    #f4f7fa 0%,
+                    #ffffff 55%,
+                    #eef3f7 100%
+                );
+        }
 
-st.sidebar.header("Bộ lọc")
+        .block-container {
+            max-width: 1450px;
+            padding-top: 1.2rem;
+            padding-bottom: 3rem;
+        }
 
-year = st.sidebar.selectbox("Năm", [2026], index=0)
-month = st.sidebar.selectbox("Tháng", [7], index=0)
+        header[data-testid="stHeader"] {
+            background: transparent;
+        }
 
-data = data_raw.copy()
+        #MainMenu {
+            visibility: hidden;
+        }
 
-# Lọc theo Ngày hóa đơn
-data = data[
-    (data["ngay_hoa_don"].dt.year == year) &
-    (data["ngay_hoa_don"].dt.month == month)
-]
+        footer {
+            visibility: hidden;
+        }
 
-exclude_status = [
-    "Báo giá",
-    "Hủy",
-    "Không thực hiện",
-    "Không duyệt",
-    "Nháp"
-]
+        .hero-card {
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid rgba(23, 62, 94, 0.12);
+            border-radius: 22px;
+            padding: 22px 32px;
+            box-shadow: 0 16px 40px rgba(20, 52, 78, 0.10);
+            margin-bottom: 20px;
+            text-align: center;
+        }
 
-data = data[~data["trang_thai"].isin(exclude_status)]
+        .hero-title {
+            font-size: 34px;
+            font-weight: 800;
+            color: #173e5e;
+            margin: 4px 0 6px 0;
+        }
 
-# Chỉ lấy dòng có doanh thu trước thuế > 0
-data = data[data["doanh_thu_truoc_thue"] > 0]
+        .hero-subtitle {
+            font-size: 16px;
+            color: #657786;
+            margin: 0;
+        }
 
-# ======================
-# 5. KPI
-# ======================
+        .section-title {
+            font-size: 24px;
+            font-weight: 750;
+            color: #173e5e;
+            margin-top: 12px;
+            margin-bottom: 4px;
+        }
 
-actual_ro = data["ro"].nunique()
-actual_revenue = data["doanh_thu_truoc_thue"].sum()
-total_after_tax = data["tong_tien_sau_thue"].sum()
+        .section-description {
+            color: #71808d;
+            margin-bottom: 14px;
+        }
 
-ro_rate = actual_ro / TARGET_RO if TARGET_RO > 0 else 0
-revenue_rate = actual_revenue / TARGET_REVENUE if TARGET_REVENUE > 0 else 0
-revenue_per_ro = actual_revenue / actual_ro if actual_ro > 0 else 0
+        .dashboard-card {
+            background: #ffffff;
+            border: 1px solid #dfe8ee;
+            border-radius: 18px;
+            padding: 22px;
+            box-shadow: 0 10px 28px rgba(25, 54, 76, 0.08);
+            margin-top: 12px;
+        }
 
-kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+        .selected-location {
+            font-size: 27px;
+            font-weight: 800;
+            color: #173e5e;
+        }
 
-kpi1.metric(
-    "Lượt xe / RO",
-    f"{actual_ro:,.0f}",
-    f"Target: {TARGET_RO:,.0f} | {ro_rate:.2%}"
+        .selected-detail {
+            font-size: 15px;
+            color: #687987;
+            margin-top: 5px;
+        }
+
+        div.stButton > button {
+            border-radius: 12px;
+            border: 1px solid #c7d6df;
+            background: #ffffff;
+            color: #173e5e;
+            font-weight: 650;
+            min-height: 44px;
+        }
+
+        div.stButton > button:hover {
+            border-color: #173e5e;
+            background: #edf4f8;
+            color: #173e5e;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
-kpi2.metric(
-    "Doanh thu trước thuế",
-    f"{actual_revenue / 1_000_000:,.2f}M",
-    f"Target: {TARGET_REVENUE / 1_000_000:,.0f}M | {revenue_rate:.2%}"
+
+# ---------------------------------------------------------
+# HEADER AND LOGO
+# ---------------------------------------------------------
+logo_col_1, logo_col_2, logo_col_3 = st.columns([1.8, 1, 1.8])
+
+with logo_col_2:
+    try:
+        st.image("carpla_logo.png", use_container_width=True)
+    except Exception:
+        st.markdown(
+            """
+            <div style="
+                text-align:center;
+                font-size:36px;
+                font-weight:900;
+                color:#173e5e;
+                padding:10px;
+            ">
+                CARPLA
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+st.markdown(
+    """
+    <div class="hero-card">
+        <div class="hero-title">CARPLA SERVICE PERFORMANCE DASHBOARD</div>
+        <p class="hero-subtitle">
+            Select a location on the Vietnam map to view workshop performance.
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
-kpi3.metric(
-    "Tổng tiền sau thuế",
-    f"{total_after_tax / 1_000_000:,.2f}M"
+
+# ---------------------------------------------------------
+# MAP SECTION
+# ---------------------------------------------------------
+st.markdown(
+    '<div class="section-title">Carpla Service Network</div>',
+    unsafe_allow_html=True,
 )
 
-kpi4.metric(
-    "DT trước thuế / RO",
-    f"{revenue_per_ro / 1_000_000:,.2f}M"
+st.markdown(
+    '<div class="section-description">'
+    'Click a red location pin, then select “Open dashboard”.'
+    '</div>',
+    unsafe_allow_html=True,
 )
 
-st.divider()
 
-# ======================
-# 6. SUMMARY TABLE
-# ======================
+# Build markers for the HTML map
+markers_javascript = ""
 
-st.subheader("1. Lượt xe và doanh thu: Chỉ tiêu / Thực hiện")
+for location_name, information in WORKSHOPS.items():
+    safe_name = location_name.replace("'", "\\'")
+    safe_workshop = information["workshop"].replace("'", "\\'")
+    safe_branch = information["branch"].replace("'", "\\'")
 
-summary_kpi = pd.DataFrame({
-    "Chỉ tiêu": ["Lượt xe / RO", "Doanh thu trước thuế"],
-    "Target": [
-        f"{TARGET_RO:,.0f}",
-        f"{TARGET_REVENUE / 1_000_000:,.0f}M"
-    ],
-    "Thực hiện": [
-        f"{actual_ro:,.0f}",
-        f"{actual_revenue / 1_000_000:,.2f}M"
-    ],
-    "% đạt": [
-        f"{ro_rate:.2%}",
-        f"{revenue_rate:.2%}"
-    ]
-})
+    markers_javascript += f"""
+        L.marker(
+            [{information["latitude"]}, {information["longitude"]}],
+            {{icon: redIcon}}
+        )
+        .addTo(map)
+        .bindPopup(`
+            <div style="font-family:Arial; min-width:210px;">
+                <div style="
+                    font-size:17px;
+                    font-weight:700;
+                    color:#173e5e;
+                    margin-bottom:5px;
+                ">
+                    {safe_name}
+                </div>
 
-st.dataframe(summary_kpi, use_container_width=True, hide_index=True)
+                <div style="
+                    font-size:13px;
+                    color:#5f7180;
+                    margin-bottom:3px;
+                ">
+                    {safe_branch}
+                </div>
 
-# ======================
-# 7. BRAND SUMMARY
-# ======================
+                <div style="
+                    font-size:13px;
+                    color:#5f7180;
+                    margin-bottom:12px;
+                ">
+                    {safe_workshop}
+                </div>
 
-st.subheader("2. Hãng xe")
+                <div style="
+                    font-size:12px;
+                    color:#173e5e;
+                    font-weight:700;
+                ">
+                    Use the location buttons below the map to open this dashboard.
+                </div>
+            </div>
+        `);
+    """
 
-brand_summary = (
-    data.groupby("hang_xe")
-    .agg(
-        so_ro=("ro", "nunique"),
-        doanh_thu=("doanh_thu_truoc_thue", "sum")
+
+map_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+    </script>
+
+    <style>
+        html,
+        body {{
+            margin: 0;
+            padding: 0;
+            background: transparent;
+        }}
+
+        #map {{
+            width: 100%;
+            height: 620px;
+            border-radius: 18px;
+        }}
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <script>
+        const map = L.map(
+            "map",
+            {{
+                zoomControl: true,
+                scrollWheelZoom: false
+            }}
+        ).setView([16.2, 107.8], 5.2);
+
+        L.tileLayer(
+            "https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png",
+            {{
+                maxZoom: 19,
+                attribution: "&copy; OpenStreetMap contributors"
+            }}
+        ).addTo(map);
+
+        const redIcon = new L.Icon({{
+            iconUrl:
+                "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+            shadowUrl:
+                "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        }});
+
+        {markers_javascript}
+    </script>
+</body>
+</html>
+"""
+
+components.html(
+    map_html,
+    height=640,
+    scrolling=False,
+)
+
+
+# ---------------------------------------------------------
+# LOCATION BUTTONS
+# Streamlit buttons reliably open each dashboard
+# ---------------------------------------------------------
+st.markdown(
+    '<div class="section-title">Select a workshop</div>',
+    unsafe_allow_html=True,
+)
+
+location_names = list(WORKSHOPS.keys())
+button_columns = st.columns(len(location_names))
+
+for index, location_name in enumerate(location_names):
+    with button_columns[index]:
+        if st.button(
+            f"📍 {location_name}",
+            use_container_width=True,
+            key=f"location_{index}",
+        ):
+            st.session_state.selected_location = location_name
+            st.rerun()
+
+
+# ---------------------------------------------------------
+# SELECTED WORKSHOP DASHBOARD
+# ---------------------------------------------------------
+if st.session_state.selected_location is not None:
+    selected_name = st.session_state.selected_location
+    selected_info = WORKSHOPS[selected_name]
+
+    st.markdown(
+        f"""
+        <div class="dashboard-card">
+            <div class="selected-location">
+                {selected_info["workshop"]}
+            </div>
+
+            <div class="selected-detail">
+                {selected_info["branch"]} · {selected_name}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-    .reset_index()
-    .sort_values("doanh_thu", ascending=False)
-)
 
-total_ro_brand = brand_summary["so_ro"].sum()
-total_revenue_brand = brand_summary["doanh_thu"].sum()
+    metric_1, metric_2, metric_3, metric_4 = st.columns(4)
 
-brand_summary["ty_trong_ro"] = brand_summary["so_ro"] / total_ro_brand
-brand_summary["ty_trong_doanh_thu"] = brand_summary["doanh_thu"] / total_revenue_brand
+    with metric_1:
+        st.metric(
+            label="Repair Orders",
+            value="0",
+            delta="Waiting for data",
+        )
 
-brand_display = brand_summary.copy()
+    with metric_2:
+        st.metric(
+            label="Service Revenue",
+            value="0 VND",
+            delta="Waiting for data",
+        )
 
-brand_display["doanh_thu"] = brand_display["doanh_thu"].map(
-    lambda x: f"{x / 1_000_000:,.2f}M"
-)
+    with metric_3:
+        st.metric(
+            label="Parts Revenue",
+            value="0 VND",
+            delta="Waiting for data",
+        )
 
-brand_display["ty_trong_ro"] = brand_display["ty_trong_ro"].map(
-    lambda x: f"{x:.2%}"
-)
+    with metric_4:
+        st.metric(
+            label="Total Revenue",
+            value="0 VND",
+            delta="Waiting for data",
+        )
 
-brand_display["ty_trong_doanh_thu"] = brand_display["ty_trong_doanh_thu"].map(
-    lambda x: f"{x:.2%}"
-)
-
-brand_display = brand_display.rename(columns={
-    "hang_xe": "Hãng xe",
-    "so_ro": "Số RO",
-    "doanh_thu": "Doanh thu trước thuế",
-    "ty_trong_ro": "Tỷ trọng RO",
-    "ty_trong_doanh_thu": "Tỷ trọng doanh thu"
-})
-
-total_brand_row = pd.DataFrame({
-    "Hãng xe": ["TỔNG"],
-    "Số RO": [total_ro_brand],
-    "Doanh thu trước thuế": [f"{total_revenue_brand / 1_000_000:,.2f}M"],
-    "Tỷ trọng RO": ["100.00%"],
-    "Tỷ trọng doanh thu": ["100.00%"]
-})
-
-brand_display = pd.concat(
-    [brand_display, total_brand_row],
-    ignore_index=True
-)
-
-left, right = st.columns([1.2, 1])
-
-with left:
-    st.dataframe(brand_display, use_container_width=True, hide_index=True)
-
-with right:
-    brand_chart = brand_summary.head(10).copy()
-    brand_chart["doanh_thu_M"] = brand_chart["doanh_thu"] / 1_000_000
-
-    fig_brand = px.bar(
-        brand_chart,
-        x="hang_xe",
-        y="doanh_thu_M",
-        text="doanh_thu_M",
-        title="Top hãng xe theo doanh thu"
+    st.info(
+        "This section will later display the complete dashboard for the "
+        f"{selected_info['workshop']} location."
     )
 
-    fig_brand.update_traces(
-        texttemplate="%{text:.1f}M",
-        textposition="outside"
+    if st.button(
+        "← Return to network map",
+        use_container_width=False,
+    ):
+        st.session_state.selected_location = None
+        st.rerun()
+
+else:
+    st.info(
+        "Select one of the workshop locations above to open its dashboard."
     )
-
-    fig_brand.update_layout(
-        xaxis_title="Hãng xe",
-        yaxis_title="Doanh thu trước thuế (M)",
-        height=420
-    )
-
-    st.plotly_chart(fig_brand, use_container_width=True)
-
-# ======================
-# 8. PAYMENT STRUCTURE
-# ======================
-
-st.subheader("3. Cơ cấu nguồn thanh toán")
-
-bao_hiem_value = data["bao_hiem_chi_tra"].sum()
-khach_hang_value = data["khach_hang_chi_tra"].sum()
-
-payment_structure = pd.DataFrame({
-    "Nguồn thanh toán": [
-        "Bảo hiểm chi trả",
-        "Khách hàng chi trả"
-    ],
-    "Giá trị": [
-        bao_hiem_value,
-        khach_hang_value
-    ]
-})
-
-total_payment = payment_structure["Giá trị"].sum()
-
-payment_structure["Tỷ trọng"] = payment_structure["Giá trị"] / total_payment
-
-payment_display = payment_structure.copy()
-
-payment_display["Giá trị"] = payment_display["Giá trị"].map(
-    lambda x: f"{x / 1_000_000:,.2f}M"
-)
-
-payment_display["Tỷ trọng"] = payment_display["Tỷ trọng"].map(
-    lambda x: f"{x:.2%}"
-)
-
-total_payment_row = pd.DataFrame({
-    "Nguồn thanh toán": ["TỔNG"],
-    "Giá trị": [f"{total_payment / 1_000_000:,.2f}M"],
-    "Tỷ trọng": ["100.00%"]
-})
-
-payment_display = pd.concat(
-    [payment_display, total_payment_row],
-    ignore_index=True
-)
-
-left, right = st.columns([1, 1])
-
-with left:
-    st.dataframe(payment_display, use_container_width=True, hide_index=True)
-
-with right:
-    fig_payment = px.pie(
-        payment_structure,
-        names="Nguồn thanh toán",
-        values="Giá trị",
-        title="Tỷ trọng nguồn thanh toán"
-    )
-
-    st.plotly_chart(fig_payment, use_container_width=True)
-
-# ======================
-# 9. CHECK TOTAL
-# ======================
-
-with st.expander("Kiểm tra đối chiếu tổng"):
-    st.write(
-        "Tổng doanh thu trước thuế:",
-        f"{actual_revenue / 1_000_000:,.2f}M"
-    )
-
-    st.write(
-        "Tổng tiền sau thuế:",
-        f"{total_after_tax / 1_000_000:,.2f}M"
-    )
-
-    st.write(
-        "Tổng cơ cấu nguồn thanh toán:",
-        f"{total_payment / 1_000_000:,.2f}M"
-    )
-
-    st.write(
-        "Chênh Tổng tiền sau thuế - Cơ cấu:",
-        f"{(total_after_tax - total_payment) / 1_000_000:,.2f}M"
-    )
-
-# ======================
-# 10. RAW DATA
-# ======================
-
-with st.expander("Xem dữ liệu chi tiết"):
-    st.dataframe(data, use_container_width=True)
